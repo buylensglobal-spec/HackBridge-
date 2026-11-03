@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Join Hackathon | HackBridge</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="site-header">
+      <div class="container topbar">
+        <a class="brand" href="index.html">
+          <img class="brand-mark" src="HackBridgeLogo.png" alt="HackBridge logo" />
+          <div class="brand-name">HackBridge</div>
+        </a>
+        <a class="secondary-btn" href="hackathons.html">Back to Hackathons</a>
+      </div>
+    </header>
+
+    <main class="container page-shell">
+      <div class="section-heading">
+        <div>
+          <div class="eyebrow">Hackathon Registration</div>
+          <h1 id="join-title">Join Hackathon</h1>
+        </div>
+      </div>
+
+      <section class="edit-form-panel">
+        <div class="panel-heading">
+          <div>
+            <h2>Confirm your participation</h2>
+            <p class="muted">Review event details and continue with your application.</p>
+          </div>
+        </div>
+
+        <div class="card info-card" id="join-details" style="margin-top: 24px;">
+          <p class="muted">Loading hackathon details...</p>
+        </div>
+
+        <form class="edit-form" id="hackathon-join-form" style="margin-top: 24px;">
+          <div class="field-grid">
+            <div class="field-group field-wide">
+              <label for="team-name">Team Name</label>
+              <input id="team-name" name="teamName" type="text" placeholder="Enter your team name" required />
+            </div>
+          </div>
+
+          <div class="edit-actions">
+            <p class="form-status" role="status" aria-live="polite"></p>
+            <button class="primary-btn" type="submit">Join</button>
+          </div>
+        </form>
+
+        <section class="info-card" id="joined-teams" style="margin-top: 24px;">
+          <h3>Teams Joined</h3>
+          <p class="muted team-list-status" data-team-list-status>Loading teams...</p>
+          <ul class="info-list team-list" data-team-list></ul>
+        </section>
+      </section>
+    </main>
+
+    <script type="module">
+      import { database, get, onValue, ref, set } from './firebase.js';
+
+      const urlParams = new URLSearchParams(window.location.search);
+      const selectedTitle = urlParams.get('title') || 'Hackathon';
+      const joinTitle = document.getElementById('join-title');
+      const joinDetails = document.getElementById('join-details');
+      const form = document.getElementById('hackathon-join-form');
+      const status = form.querySelector('.form-status');
+      const teamList = document.querySelector('[data-team-list]');
+      const teamListStatus = document.querySelector('[data-team-list-status]');
+
+      const sanitizeFirebaseKey = (value) => String(value || '')
+        .trim()
+        .replace(/[.#$]/g, '_')
+        .replace(/\[/g, '_')
+        .replace(/\]/g, '_')
+        .replace(/\//g, '_');
+
+      joinTitle.textContent = selectedTitle;
+
+      const loadHackathon = async () => {
+        try {
+          const snapshot = await get(ref(database, 'hackathons'));
+          const data = snapshot.val() || {};
+          const matchingEntry = Object.entries(data).find(([, item]) => {
+            return (item.hackathonName || '').trim() === selectedTitle;
+          });
+          const match = matchingEntry?.[1];
+
+          if (!match) {
+            joinDetails.innerHTML = '<p class="muted">Hackathon details were not found.</p>';
+            teamListStatus.textContent = 'Hackathon teams could not be loaded.';
+            return;
+          }
+
+          loadTeamNames(matchingEntry[0]);
+
+          joinDetails.innerHTML = `
+            <h3>${match.hackathonName || selectedTitle}</h3>
+            <p><strong>Organization:</strong> ${match.organizationName || 'Not provided'}</p>
+            <p><strong>Email:</strong> ${match.organizationEmail || 'Not provided'}</p>
+            <p><strong>Team size:</strong> ${match.teamSize || 'Not specified'}</p>
+            <p><strong>End date:</strong> ${match.endDate || 'Not specified'}</p>
+            <p><strong>Prize:</strong> ${match.prize1 || match.participationPrize || 'Not provided'}</p>
+          `;
+        } catch (error) {
+          console.error('Could not load hackathon details', error);
+          joinDetails.innerHTML = '<p class="muted">Unable to load the selected hackathon details.</p>';
+        }
+      };
+
+      const loadTeamNames = (hackathonKey) => {
+        onValue(ref(database, `hackathons/${hackathonKey}`), (snapshot) => {
+          const hackathon = snapshot.val() || {};
+          const teams = Object.entries(hackathon).filter(([, value]) => {
+            return value && typeof value === 'object' && !Array.isArray(value);
+          });
+
+          teams.forEach(async ([teamName, team]) => {
+            if (team.teamOwner) return;
+            const memberId = Object.keys(team).find((key) => key !== 'teamOwner');
+            if (!memberId) return;
+            try {
+              await set(ref(database, `hackathons/${hackathonKey}/${teamName}/teamOwner`), memberId);
+            } catch (error) {
+              console.error('Could not migrate team owner', error);
+            }
+          });
+
+          teamList.replaceChildren();
+          if (!teams.length) {
+            teamListStatus.textContent = 'No teams have joined yet.';
+            return;
+          }
+
+          teamListStatus.textContent = `${teams.length} team${teams.length === 1 ? '' : 's'} joined`;
+          teams.forEach(([teamName]) => {
+            const item = document.createElement('li');
+            const link = document.createElement('a');
+            link.href = `team.html?hackathon=${encodeURIComponent(selectedTitle)}&team=${encodeURIComponent(teamName)}`;
+            link.textContent = teamName;
+            item.append(link);
+            teamList.append(item);
+          });
+        });
+      };
+
+      form.addEventListener('submit', async (event) => {
+        event.preventDefault();
+
+        const formData = new FormData(form);
+        const teamName = String(formData.get('teamName') || '').trim();
+        const studentId = localStorage.getItem('hackbridge-profile-id');
+
+        if (!teamName) {
+          status.textContent = 'Please enter a team name.';
+          status.style.color = '#b42318';
+          return;
+        }
+        if (!studentId) {
+          status.textContent = 'Please log in before joining a hackathon.';
+          status.style.color = '#b42318';
+          return;
+        }
+
+        try {
+          const hackathonKey = sanitizeFirebaseKey(selectedTitle);
+          const teamKey = sanitizeFirebaseKey(teamName);
+          const teamRef = ref(database, `hackathons/${hackathonKey}/${teamKey}`);
+          const teamSnapshot = await get(teamRef);
+          const existingTeam = teamSnapshot.val();
+          if (!existingTeam) {
+            await set(teamRef, {
+              teamOwner: studentId,
+              [studentId]: true
+            });
+          } else {
+            await set(ref(database, `hackathons/${hackathonKey}/${teamKey}/${studentId}`), true);
+          }
+          status.textContent = 'Team joined successfully.';
+          status.style.color = '#0f766e';
+          form.reset();
+        } catch (error) {
+          console.error('Could not save join request', error);
+          status.textContent = 'Could not save your participation request. Please try again.';
+          status.style.color = '#b42318';
+        }
+      });
+
+      loadHackathon();
+    </script>
+  </body>
+</html>

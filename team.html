@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Team | HackBridge</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="site-header">
+      <div class="container topbar">
+        <a class="brand" href="index.html">
+          <img class="brand-mark" src="HackBridgeLogo.png" alt="HackBridge logo" />
+          <div class="brand-name">HackBridge</div>
+        </a>
+        <a class="secondary-btn" href="javascript:history.back()">Back</a>
+      </div>
+    </header>
+
+    <main class="container page-shell">
+      <div class="section-heading">
+        <div>
+          <div class="eyebrow">Hackathon Team</div>
+          <h1 data-team-name>Team</h1>
+          <p class="muted" data-hackathon-name></p>
+        </div>
+      </div>
+
+      <section class="info-card">
+        <div class="team-heading-row">
+          <h2>Team members</h2>
+          <button class="primary-btn" type="button" data-team-join>Join in this Team</button>
+        </div>
+        <p class="muted" data-team-status>Loading team members...</p>
+        <p class="form-status" data-team-join-status role="status" aria-live="polite"></p>
+        <ul class="info-list team-member-list" data-team-members></ul>
+      </section>
+    </main>
+
+    <script type="module">
+      import { database, get, ref, set } from './firebase.js';
+
+      const params = new URLSearchParams(window.location.search);
+      const hackathonName = params.get('hackathon') || '';
+      const teamName = params.get('team') || '';
+      const teamNameElement = document.querySelector('[data-team-name]');
+      const hackathonNameElement = document.querySelector('[data-hackathon-name]');
+      const status = document.querySelector('[data-team-status]');
+      const joinButton = document.querySelector('[data-team-join]');
+      const joinStatus = document.querySelector('[data-team-join-status]');
+      const membersList = document.querySelector('[data-team-members]');
+
+      const sanitizeFirebaseKey = (value) => String(value || '')
+        .trim()
+        .replace(/[.#$]/g, '_')
+        .replace(/\[/g, '_')
+        .replace(/\]/g, '_')
+        .replace(/\//g, '_');
+
+      teamNameElement.textContent = teamName || 'Team';
+      hackathonNameElement.textContent = hackathonName;
+
+      const loadTeam = async () => {
+        if (!hackathonName || !teamName) {
+          status.textContent = 'Team details could not be loaded.';
+          return;
+        }
+
+        try {
+          const teamSnapshot = await get(ref(database, `hackathons/${sanitizeFirebaseKey(hackathonName)}/${sanitizeFirebaseKey(teamName)}`));
+          const teamMembers = teamSnapshot.val() || {};
+          const ownerId = teamMembers.teamOwner || '';
+          const studentIds = Object.keys(teamMembers).filter((key) => key !== 'teamOwner');
+          if (!studentIds.length) {
+            status.textContent = 'No team members found.';
+            return;
+          }
+
+          const studentsSnapshot = await get(ref(database, 'students'));
+          const students = studentsSnapshot.val() || {};
+          membersList.replaceChildren();
+          studentIds.forEach((studentId) => {
+            const student = students[studentId];
+            const item = document.createElement('li');
+            item.className = 'team-member-card';
+
+            if (student?.profileImageUrl) {
+              const image = document.createElement('img');
+              image.className = 'team-member-image';
+              image.src = student.profileImageUrl;
+              image.alt = `${student.name || 'Student'} profile`;
+              item.append(image);
+            }
+
+            const content = document.createElement('div');
+            content.className = 'team-member-content';
+            const memberHeading = document.createElement('div');
+            memberHeading.className = 'team-member-heading';
+            const name = document.createElement('h3');
+            name.textContent = student?.name || 'Student profile not found';
+            memberHeading.append(name);
+            if (studentId === ownerId) {
+              const ownerBadge = document.createElement('span');
+              ownerBadge.className = 'team-owner-badge';
+              ownerBadge.textContent = 'Team owner';
+              memberHeading.append(ownerBadge);
+            } else if (localStorage.getItem('hackbridge-profile-id') === ownerId) {
+              const removeButton = document.createElement('button');
+              removeButton.className = 'secondary-btn team-remove-button';
+              removeButton.type = 'button';
+              removeButton.textContent = 'Remove';
+              removeButton.addEventListener('click', async () => {
+                if (!window.confirm(`Remove ${student?.name || 'this teammate'} from the team?`)) return;
+
+                removeButton.disabled = true;
+                try {
+                  await set(ref(database, `hackathons/${sanitizeFirebaseKey(hackathonName)}/${sanitizeFirebaseKey(teamName)}/${studentId}`), null);
+                  joinStatus.textContent = 'Teammate removed from the team.';
+                  joinStatus.style.color = '#0f766e';
+                } catch (error) {
+                  removeButton.disabled = false;
+                  joinStatus.textContent = 'Could not remove this teammate. Please try again.';
+                  joinStatus.style.color = '#b42318';
+                  console.error('Could not remove team member', error);
+                }
+              });
+              memberHeading.append(removeButton);
+            }
+            content.append(memberHeading);
+
+            const details = document.createElement('dl');
+            details.className = 'team-member-details';
+            const fields = { studentId, ...(student || {}) };
+            Object.entries(fields).forEach(([field, value]) => {
+              if (field === 'password' || field === 'profileImageUrl' || value === '') return;
+              const term = document.createElement('dt');
+              term.textContent = field === 'studentId' ? 'Student ID' : formatField(field);
+              const description = document.createElement('dd');
+              description.textContent = formatValue(field, value);
+              details.append(term, description);
+            });
+            content.append(details);
+            const projects = student?.projects ? Object.values(student.projects) : [];
+            if (projects.length) {
+              const projectsSection = document.createElement('div');
+              projectsSection.className = 'team-member-projects';
+              const projectsHeading = document.createElement('h4');
+              projectsHeading.textContent = 'Available projects';
+              const projectsGrid = document.createElement('div');
+              projectsGrid.className = 'team-project-grid';
+
+              projects.forEach((project) => {
+                const projectCard = document.createElement('article');
+                projectCard.className = 'team-project-card';
+                if (project.imageUrl) {
+                  const image = document.createElement('img');
+                  image.src = project.imageUrl;
+                  image.alt = `${project.title || 'Project'} image`;
+                  image.loading = 'lazy';
+                  projectCard.append(image);
+                }
+                const projectContent = document.createElement('div');
+                const projectTitle = document.createElement('strong');
+                projectTitle.textContent = project.title || 'Untitled project';
+                const projectDescription = document.createElement('p');
+                projectDescription.textContent = project.description || 'No description provided.';
+                const projectVenue = document.createElement('span');
+                projectVenue.textContent = `Presented at: ${project.presentedAt || 'Not specified'}`;
+                projectContent.append(projectTitle, projectDescription, projectVenue);
+                projectCard.append(projectContent);
+                projectsGrid.append(projectCard);
+              });
+
+              projectsSection.append(projectsHeading, projectsGrid);
+              content.append(projectsSection);
+            }
+            item.append(content);
+            membersList.append(item);
+          });
+          const currentStudentId = localStorage.getItem('hackbridge-profile-id');
+          if (studentIds.includes(currentStudentId)) {
+            joinButton.textContent = 'Already in this Team';
+            joinButton.disabled = true;
+          }
+          status.textContent = `${studentIds.length} team member${studentIds.length === 1 ? '' : 's'}`;
+        } catch (error) {
+          console.error('Could not load team members', error);
+          status.textContent = 'Unable to load team members.';
+        }
+      };
+
+      joinButton.addEventListener('click', async () => {
+        const studentId = localStorage.getItem('hackbridge-profile-id');
+        if (!studentId) {
+          joinStatus.textContent = 'Please log in before joining this team.';
+          joinStatus.style.color = '#b42318';
+          return;
+        }
+
+        try {
+          await set(ref(database, `hackathons/${sanitizeFirebaseKey(hackathonName)}/${sanitizeFirebaseKey(teamName)}/${studentId}`), true);
+          joinButton.textContent = 'Already in this Team';
+          joinButton.disabled = true;
+          joinStatus.textContent = 'You joined this team successfully.';
+          joinStatus.style.color = '#0f766e';
+        } catch (error) {
+          console.error('Could not join team', error);
+          joinStatus.textContent = 'Could not join this team. Please try again.';
+          joinStatus.style.color = '#b42318';
+        }
+      });
+
+      const formatField = (field) => {
+        const labels = {
+          collegeName: 'College',
+          programmingLanguages: 'Programming languages'
+        };
+        return labels[field] || field.replace(/([A-Z])/g, ' $1').replace(/^./, (letter) => letter.toUpperCase());
+      };
+
+      const formatValue = (field, value) => {
+        if (field === 'projects' && value && typeof value === 'object') {
+          const count = Object.keys(value).length;
+          return `${count} project${count === 1 ? '' : 's'}`;
+        }
+        return String(value ?? 'Not provided');
+      };
+
+      loadTeam();
+    </script>
+  </body>
+</html>

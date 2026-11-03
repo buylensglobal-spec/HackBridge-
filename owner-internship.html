@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Add Internship | HackBridge</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="site-header">
+      <div class="container topbar">
+        <a class="brand" href="owner-dashboard.html">
+          <img class="brand-mark" src="HackBridgeLogo.png" alt="HackBridge logo" />
+          <div class="brand-name">HackBridge</div>
+        </a>
+        <button class="secondary-btn" id="owner-logout" type="button">Log out</button>
+      </div>
+    </header>
+
+    <main class="container page-shell">
+      <div class="section-heading">
+        <div>
+          <div class="eyebrow">Owner Dashboard</div>
+          <h1>Add Internship</h1>
+        </div>
+        <a class="ghost-btn" href="owner-dashboard.html">Back to Owner Dashboard</a>
+      </div>
+
+      <div class="edit-layout youtube-edit-layout">
+        <aside class="edit-summary">
+          <div class="summary-mark">IN</div>
+          <h2>Build the opportunity list</h2>
+          <p>Publish clear internship opportunities so students can find roles that match their skills and interests.</p>
+          <div class="summary-rule"></div>
+          <span class="summary-label">Required details</span>
+          <strong>Role, company, and description</strong>
+          <span class="summary-label">Helpful context</span>
+          <strong>Location, duration, and requirements</strong>
+        </aside>
+
+        <section class="edit-form-panel">
+          <div class="panel-heading">
+            <div>
+              <h2>Internship details</h2>
+              <p class="muted">Add the information students need to evaluate this opportunity.</p>
+            </div>
+          </div>
+
+          <form class="edit-form" id="add-internship-form">
+            <div class="field-grid">
+              <div class="field-group field-wide">
+                <label for="internship-title">Internship title</label>
+                <input id="internship-title" name="title" type="text" placeholder="Frontend Engineer Intern" required />
+              </div>
+
+              <div class="field-group">
+                <label for="internship-company">Company</label>
+                <input id="internship-company" name="company" type="text" placeholder="Company name" required />
+              </div>
+
+              <div class="field-group">
+                <label for="internship-location">Location</label>
+                <input id="internship-location" name="location" type="text" placeholder="Remote, Hybrid, or City" required />
+              </div>
+
+              <div class="field-group">
+                <label for="internship-duration">Duration</label>
+                <input id="internship-duration" name="duration" type="text" placeholder="3 months" required />
+              </div>
+
+              <div class="field-group field-wide">
+                <label for="internship-description">Description</label>
+                <textarea id="internship-description" name="description" rows="4" placeholder="Describe the work and learning opportunity" required></textarea>
+              </div>
+
+              <div class="field-group field-wide">
+                <label for="internship-requirements">Requirements</label>
+                <textarea id="internship-requirements" name="requirements" rows="4" placeholder="Skills, experience, or qualifications"></textarea>
+              </div>
+            </div>
+
+            <div class="edit-actions">
+              <p class="form-status" data-internship-status role="status" aria-live="polite"></p>
+              <button class="primary-btn" type="submit">Save Internship</button>
+            </div>
+          </form>
+        </section>
+      </div>
+    </main>
+
+    <script type="module">
+      import { database, push, ref } from './firebase.js';
+
+      if (localStorage.getItem('hackbridge-role') !== 'owner') {
+        window.location.replace('login.html');
+      } else {
+        const logoutButton = document.getElementById('owner-logout');
+        const form = document.getElementById('add-internship-form');
+        const status = form.querySelector('[data-internship-status]');
+
+        logoutButton.addEventListener('click', () => {
+          localStorage.removeItem('hackbridge-role');
+          window.location.replace('login.html');
+        });
+
+        form.addEventListener('submit', async (event) => {
+          event.preventDefault();
+          const formData = new FormData(form);
+          const requirements = String(formData.get('requirements') || '')
+            .split('\n')
+            .map((item) => item.trim())
+            .filter(Boolean);
+
+          const internship = {
+            title: String(formData.get('title') || '').trim(),
+            company: String(formData.get('company') || '').trim(),
+            location: String(formData.get('location') || '').trim(),
+            duration: String(formData.get('duration') || '').trim(),
+            description: String(formData.get('description') || '').trim(),
+            requirements,
+            createdAt: new Date().toISOString()
+          };
+
+          status.textContent = 'Saving internship...';
+          try {
+            await push(ref(database, 'internships'), internship);
+            form.reset();
+            status.textContent = 'Internship saved successfully.';
+            status.style.color = '#0f766e';
+          } catch (error) {
+            console.error('Could not save internship', error);
+            status.textContent = 'Could not save the internship. Please try again.';
+            status.style.color = '#b42318';
+          }
+        });
+      }
+    </script>
+  </body>
+</html>

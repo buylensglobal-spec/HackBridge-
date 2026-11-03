@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Add Hackathon | HackBridge</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="site-header">
+      <div class="container topbar">
+        <a class="brand" href="owner-dashboard.html">
+          <img class="brand-mark" src="HackBridgeLogo.png" alt="HackBridge logo" />
+          <div class="brand-name">HackBridge</div>
+        </a>
+        <button class="secondary-btn" id="owner-logout" type="button">Log out</button>
+      </div>
+    </header>
+
+    <main class="container page-shell">
+      <div class="section-heading">
+        <div>
+          <div class="eyebrow">Owner Dashboard</div>
+          <h1>Add Hackathon</h1>
+        </div>
+        <a class="ghost-btn" href="owner-dashboard.html">Back to Owner Dashboard</a>
+      </div>
+
+      <div class="edit-layout youtube-edit-layout">
+        <aside class="edit-summary">
+          <div class="summary-mark">HT</div>
+          <h2>Build the event list</h2>
+          <p>Add hackathon opportunities and help students discover relevant competition experiences.</p>
+          <div class="summary-rule"></div>
+          <span class="summary-label">Coming soon</span>
+          <strong>Hackathon details and listing form</strong>
+          <span class="summary-label">Owner action</span>
+          <strong>Prepare event details for the community</strong>
+        </aside>
+
+        <section class="edit-form-panel">
+          <div class="panel-heading">
+            <div>
+              <h2>Hackathon details</h2>
+              <p class="muted">Add the organizing details and event structure for the hackathon listing.</p>
+            </div>
+          </div>
+
+          <form class="edit-form" id="add-hackathon-form">
+            <div class="field-grid">
+              <div class="field-group field-wide">
+                <label for="hackathon-org-name">Hackathon organization name</label>
+                <input id="hackathon-org-name" name="organizationName" type="text" placeholder="Organization or host name" required />
+              </div>
+
+              <div class="field-group field-wide">
+                <label for="hackathon-name">Hackathon Name</label>
+                <input id="hackathon-name" name="hackathonName" type="text" placeholder="Enter hackathon name" required />
+              </div>
+
+              <div class="field-group field-wide">
+                <label for="hackathon-org-address">Address of organization</label>
+                <input id="hackathon-org-address" name="organizationAddress" type="text" placeholder="Street, city, state, country" required />
+              </div>
+
+              <div class="field-group field-wide">
+                <label for="hackathon-org-email">Email of organization</label>
+                <input id="hackathon-org-email" name="organizationEmail" type="email" placeholder="contact@organization.com" required />
+              </div>
+
+              <div class="field-group">
+                <label for="hackathon-prize-1">Prize 1</label>
+                <input id="hackathon-prize-1" name="prize1" type="text" placeholder="1st prize" />
+              </div>
+
+              <div class="field-group">
+                <label for="hackathon-prize-2">Prize 2</label>
+                <input id="hackathon-prize-2" name="prize2" type="text" placeholder="2nd prize" />
+              </div>
+
+              <div class="field-group">
+                <label for="hackathon-prize-3">Prize 3</label>
+                <input id="hackathon-prize-3" name="prize3" type="text" placeholder="3rd prize" />
+              </div>
+
+              <div class="field-group">
+                <label for="hackathon-participation-prize">Participation</label>
+                <input id="hackathon-participation-prize" name="participationPrize" type="text" placeholder="Participation reward" />
+              </div>
+
+              <div class="field-group field-wide team-size-field">
+                <label for="hackathon-team-size" class="team-size-label">No. of members per team</label>
+                <div class="team-size-input-wrap">
+                  <span class="team-size-icon" aria-hidden="true">👥</span>
+                  <select id="hackathon-team-size" class="team-size-select" name="teamSize" required>
+                    <option value="">Select team size</option>
+                    <option value="1">1</option>
+                    <option value="2">2</option>
+                    <option value="3">3</option>
+                    <option value="4">4</option>
+                    <option value="5">5</option>
+                    <option value="6">6</option>
+                    <option value="7">7</option>
+                    <option value="8">8</option>
+                    <option value="9">9</option>
+                    <option value="10">10</option>
+                  </select>
+                </div>
+                <span class="field-help">Team size limit: 1 to 10 members.</span>
+              </div>
+
+              <div class="field-group field-wide">
+                <label for="hackathon-end-date">End date</label>
+                <input id="hackathon-end-date" name="endDate" type="date" required />
+              </div>
+            </div>
+
+            <div class="edit-actions">
+              <p class="form-status" role="status" aria-live="polite"></p>
+              <button class="primary-btn" type="submit">Save Hackathon</button>
+            </div>
+          </form>
+        </section>
+      </div>
+    </main>
+
+    <script type="module">
+      import { database, ref, set } from './firebase.js';
+
+      const hackathonForm = document.getElementById('add-hackathon-form');
+      const teamSizeField = document.getElementById('hackathon-team-size');
+      const statusText = hackathonForm.querySelector('.form-status');
+
+      const sanitizeFirebaseKey = (value) => {
+        return String(value || '')
+          .trim()
+          .replace(/[.#$\[\]/]/g, '_')
+          .replace(/\//g, '_')
+          .replace(/\s+/g, ' ');
+      };
+
+      hackathonForm.addEventListener('submit', async (event) => {
+        event.preventDefault();
+
+        const teamSize = Number(teamSizeField.value);
+
+        if (!teamSizeField.value || teamSize < 1 || teamSize > 10) {
+          statusText.textContent = 'Team size must be between 1 and 10 members.';
+          statusText.style.color = '#b42318';
+          teamSizeField.focus();
+          return;
+        }
+
+        const formData = new FormData(hackathonForm);
+        const hackathonName = String(formData.get('hackathonName') || '').trim();
+
+        if (!hackathonName) {
+          statusText.textContent = 'Hackathon name is required.';
+          statusText.style.color = '#b42318';
+          document.getElementById('hackathon-name').focus();
+          return;
+        }
+
+        const endDate = String(formData.get('endDate') || '').trim();
+
+        if (!endDate) {
+          statusText.textContent = 'End date is required.';
+          statusText.style.color = '#b42318';
+          document.getElementById('hackathon-end-date').focus();
+          return;
+        }
+
+        const safeKey = sanitizeFirebaseKey(hackathonName);
+        const hackathonData = {
+          organizationName: formData.get('organizationName') || '',
+          hackathonName,
+          organizationAddress: formData.get('organizationAddress') || '',
+          organizationEmail: formData.get('organizationEmail') || '',
+          prize1: formData.get('prize1') || '',
+          prize2: formData.get('prize2') || '',
+          prize3: formData.get('prize3') || '',
+          participationPrize: formData.get('participationPrize') || '',
+          teamSize: teamSizeField.value,
+          endDate,
+          createdAt: new Date().toISOString()
+        };
+
+        try {
+          await set(ref(database, `hackathons/${safeKey}`), hackathonData);
+          statusText.textContent = 'Hackathon details saved successfully.';
+          statusText.style.color = '#0f766e';
+          hackathonForm.reset();
+        } catch (error) {
+          console.error('Failed to save hackathon:', error);
+          statusText.textContent = 'Failed to save hackathon. Please try again.';
+          statusText.style.color = '#b42318';
+        }
+      });
+    </script>
+  </body>
+</html>
